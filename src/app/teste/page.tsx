@@ -37,6 +37,7 @@ type ApiLista = {
   contatos: CSVRow[];
   reply_templates?: TemplateVariation[];
 };
+type DelayUnit = "ms" | "s" | "min";
 
 /* ================== Helpers ================== */
 const cx = (...xs: (string | false | undefined | null)[]) => xs.filter(Boolean).join(" ");
@@ -48,6 +49,13 @@ function normalizeMsisdn(raw: string): string | null {
   const withDdi = d.length === 10 || d.length === 11 ? `55${d}` : d;
   if (withDdi.length < 12 || withDdi.length > 13) return null;
   return withDdi;
+}
+
+function toMs(value: number, unit: DelayUnit): number {
+  const v = Number.isFinite(value) && value > 0 ? value : 0;
+  if (unit === "s") return Math.round(v * 1000);
+  if (unit === "min") return Math.round(v * 60_000);
+  return Math.round(v); // ms
 }
 
 // Janela 08:00–18:00
@@ -311,8 +319,12 @@ export default function Page() {
   const toggleCadence = (d: number) =>
     setCadence((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort()));
   const [maxContacts, setMaxContacts] = useState(50);
+
+  // NOVO: unidade de delay (aplica-se ao delay min/máx). Pausa continua em minutos.
+  const [delayUnit, setDelayUnit] = useState<DelayUnit>("ms");
   const [delayMin, setDelayMin] = useState(1000);
   const [delayMax, setDelayMax] = useState(5000);
+
   const [pauseEvery, setPauseEvery] = useState(20);
   const [pauseDurationMin, setPauseDurationMin] = useState(10);
 
@@ -619,8 +631,13 @@ export default function Page() {
     }
 
     const startAtMs = nextStartWithinWindow(new Date()).getTime();
-    const min = Math.max(0, Math.min(delayMin, delayMax));
-    const max = Math.max(delayMin, delayMax);
+
+    // Calcula faixa do delay na unidade selecionada e converte para ms no payload
+    const minInput = Math.max(0, Math.min(delayMin, delayMax));
+    const maxInput = Math.max(delayMin, delayMax);
+    const minMs = toMs(minInput, delayUnit);
+    const maxMs = toMs(maxInput, delayUnit);
+
     const pauseMs = Math.max(0, pauseDurationMin) * 60 * 1000;
 
     return {
@@ -628,10 +645,11 @@ export default function Page() {
       contacts: normalized,
       startAtMs,
       cadenceDays: cadence,
-      delayMsMin: min,
-      delayMsMax: max,
+      delayMsMin: minMs,
+      delayMsMax: maxMs,
       pauseEvery: Math.max(0, pauseEvery),
       pauseDurationMs: pauseMs,
+      delayUnitUsed: delayUnit, // (opcional) útil para logs/observabilidade
     };
   };
 
@@ -708,6 +726,8 @@ export default function Page() {
   const canSendLista = !!listaSelecionada && !loading;
 
   /* ================== Render ================== */
+  const delayUnitLabel = (u: DelayUnit) => (u === "ms" ? "ms" : u === "s" ? "s" : "min");
+
   return (
     <div className="min-h-dvh bg-[radial-gradient(1200px_800px_at_20%_-10%,rgba(139,92,246,0.14),transparent),radial-gradient(1000px_700px_at_120%_10%,rgba(236,72,153,0.10),transparent)] bg-zinc-950">
       {/* Topbar */}
@@ -1066,16 +1086,44 @@ export default function Page() {
             </Field>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-2">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-2">
             <Field label="Qtde máx. contatos" hint="Limita o lote atual">
               <Input type="number" min={1} value={maxContacts} onChange={(e) => setMaxContacts(Number(e.target.value))} />
             </Field>
-            <Field label="Delay min (ms)">
-              <Input type="number" min={0} value={delayMin} onChange={(e) => setDelayMin(Number(e.target.value))} />
+
+            {/* NOVO: seletor de unidade */}
+            <Field label="Unidade do delay" hint="Aplica-se ao min e máx">
+              <select
+                className="w-full appearance-none rounded-xl bg-zinc-950/60 border border-zinc-800 px-3.5 py-2.5 text-sm text-zinc-100 focus:ring-2 focus:ring-violet-500/60"
+                value={delayUnit}
+                onChange={(e) => setDelayUnit(e.target.value as DelayUnit)}
+              >
+                <option value="ms">Milissegundos (ms)</option>
+                <option value="s">Segundos (s)</option>
+                <option value="min">Minutos (min)</option>
+              </select>
             </Field>
-            <Field label="Delay máx (ms)">
-              <Input type="number" min={0} value={delayMax} onChange={(e) => setDelayMax(Number(e.target.value))} />
+
+            <Field label={`Delay min (${delayUnitLabel(delayUnit)})`}>
+              <Input
+                type="number"
+                min={0}
+                step={delayUnit === "ms" ? 1 : 0.1}
+                value={delayMin}
+                onChange={(e) => setDelayMin(Number(e.target.value))}
+              />
             </Field>
+
+            <Field label={`Delay máx (${delayUnitLabel(delayUnit)})`}>
+              <Input
+                type="number"
+                min={0}
+                step={delayUnit === "ms" ? 1 : 0.1}
+                value={delayMax}
+                onChange={(e) => setDelayMax(Number(e.target.value))}
+              />
+            </Field>
+
             <div className="grid grid-cols-2 gap-4">
               <Field label="Pausa a cada (msgs)">
                 <Input type="number" min={0} value={pauseEvery} onChange={(e) => setPauseEvery(Number(e.target.value))} />
