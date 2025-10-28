@@ -10,11 +10,9 @@ export default function Navbar({ dark, onLogout }: { dark: boolean; onLogout: ()
 
 const links = [
   { href: "/", label: "Disparador" },
-  { href: "/conexao", label: "Conexão" },
   { href: "/historico", label: "Histórico" },
   { href: "/listas", label: "Listas" },
-   { href: "/n8n", label: "N8N" },
-  { href: "/instancias", label: "Instancias" },
+  { href: "/n8n", label: "N8N" },
 ];
 
 
