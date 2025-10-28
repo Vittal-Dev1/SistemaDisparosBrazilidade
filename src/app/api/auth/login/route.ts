@@ -6,7 +6,7 @@ const SECRET = process.env.JWT_SECRET || "chave-super-secreta";
 export async function POST(req: Request) {
   const { email, password } = await req.json();
 
-  if (email === "admin@teste.com" && password === "123456") {
+  if (email === "brazilidadeia@gmail.com" && password === "brazilidadeia5555") {
     const token = jwt.sign({ email }, SECRET, { expiresIn: "2h" });
     return NextResponse.json({ token });
   }
